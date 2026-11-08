@@ -1,0 +1,53 @@
+name: Deploy dacpac artifact (PR preview)
+
+on:
+  pull_request_target:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 1
+          SA_PASSWORD: ${{ secrets.CONTAINER_SQL_PASSWORD }}
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Checkout PR head (deploy preview)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install sqlpackage (official Microsoft distribution)
+        run: |
+          curl -sL https://go.microsoft.com/fwlink/?linkid=2365831 -o sqlpackage.zip
+          unzip -q sqlpackage.zip -d sqlpackage
+          chmod +x sqlpackage/sqlpackage
+          ./sqlpackage/sqlpackage /? 2>&1 | head -5 || true
+
+      - name: Wait for SQL Server
+        run: |
+          for i in $(seq 1 60); do
+            (echo > /dev/tcp/localhost/1433) >/dev/null 2>&1 && break
+            sleep 2
+          done
+          sleep 15
+
+      - name: Deploy dacpac artifact
+        env:
+          EN0027_LABEL: ci-pr-${{ github.event.pull_request.number }}
+          EN0027_MARKDIR: /tmp/t1015-marks
+        run: |
+          ./sqlpackage/sqlpackage /a:Publish /sf:"$GITHUB_WORKSPACE/deploy/db.dacpac" /tcs:"Server=localhost,1433;Database=PrPreview;User Id=sa;Password=${{ secrets.CONTAINER_SQL_PASSWORD }};TrustServerCertificate=True"
+
+      - name: Show deploy marks (diagnostics)
+        if: always()
+        run: |
+          ls -la /tmp/t1015-marks/ 2>/dev/null || echo "no marks dir"
+          cat /tmp/t1015-marks/* 2>/dev/null || true
