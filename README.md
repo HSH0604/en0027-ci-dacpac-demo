@@ -10,3 +10,5 @@ SqlPackage against the preview SQL Server, using the repository secret
 `CONTAINER_SQL_PASSWORD` on the command line.
 
 Base `deploy/db.dacpac` is a clean data-tier package (no contributors declared).
+
+Refresh of the deploy/ dacpac artifact (contributor pipeline output).
